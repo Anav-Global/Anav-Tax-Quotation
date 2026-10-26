@@ -1,0 +1,16 @@
+{
+  "name": "ANAV Tax Fee Estimator 2027",
+  "short_name": "ANAV Fees",
+  "description": "ANAV Global LLC tax preparation fee estimator for Tax Season 2027.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#f4f3fa",
+  "theme_color": "#5b34d1",
+  "icons": [
+    { "src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
