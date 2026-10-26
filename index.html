@@ -526,7 +526,7 @@ renderPackages(); renderReturns();
 
 /* ---------- Save quote to Google Sheet ---------- */
 // Paste your Google Apps Script web app URL here (see README, "Connect Google Sheet").
-const SHEET_ENDPOINT = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
+const SHEET_ENDPOINT = "https://script.google.com/macros/s/XXXXXXXX/exec";
 const QUEUE_KEY = "anav-pending-quotes";
 const readQueue = () => { try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]"); }catch(_){ return []; } };
 const writeQueue = q => { try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(_){ } };
