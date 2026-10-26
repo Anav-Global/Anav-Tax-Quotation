@@ -40,7 +40,7 @@ When a client taps **Save my quote**, the quote is written to your Google Sheet,
 
 Total appears only on the first row of each quote, so `=SUM(I:I)` gives the total quoted. The empty G and H headers are filled with Date and Quote ID automatically.
 
-1. Open the quotes sheet. Go to **Extensions → Apps Script**.
+1. Open the quotes sheet. Go to **Extensions → Apps Script** (a standalone script from script.google.com also works, because `Code.gs` opens the sheet by its ID in `SHEET_ID`).
 2. Delete any code there and paste the full contents of `google-apps-script/Code.gs`. Click **Save**.
 3. Optional test: select `testSave` in the toolbar and click **Run**. Approve the permission prompt (Advanced → Go to project). A sample quote appears in the sheet; delete those rows.
 4. Click **Deploy → New deployment**. Select type **Web app**. Set *Execute as* = **Me**, *Who has access* = **Anyone**. Click **Deploy** and copy the **Web app URL** (ends in `/exec`).
@@ -66,5 +66,6 @@ The sheet re-calculates every quote with its own rates, so even an edited copy o
 - `manifest.webmanifest` - app name, icons and colors for installation
 - `sw.js` - service worker for offline use and updates
 - `icons/` - logo and app icons
+- `lib/jspdf.umd.min.js` - PDF library (bundled so PDF download also works offline)
 - `google-apps-script/Code.gs` - paste into the sheet's Apps Script to receive and save quotes
 - `.nojekyll` - tells GitHub Pages to serve files as-is

@@ -242,7 +242,7 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
       <div class="lines" id="lines"></div>
       <div class="quote-foot">
         <button class="btn" id="saveBtn" type="button">Save my quote</button>
-        <button class="btn ghost" id="copyBtn" type="button">Copy quote</button>
+        <button class="btn ghost" id="pdfBtn" type="button">Download PDF</button>
         <div class="toast" id="toast" aria-live="polite"></div>
         <p class="fine">This estimate is based on your answers. The final fee is confirmed after we review your documents. One federal return and the listed inclusions are covered by each package.</p>
       </div>
@@ -255,6 +255,7 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
   <a href="#quote" id="viewQuote">View quote</a>
 </div>
 
+<script src="lib/jspdf.umd.min.js"></script>
 <script>
 const DEFAULT_RATES = {
   i1040:{base:230, inclPer:1, inclStates:1, addC:60, addE:60, addK1:60, addF:60, addState:55, perType:1},
@@ -424,7 +425,7 @@ document.addEventListener("input", e=>{
   const t=e.target;
   if(t.matches(".stepper input")){ const r=returns.find(x=>x.id==t.dataset.r);
     let n=parseInt(t.value,10); if(isNaN(n)||n<0) n=0; if(n>99) n=99; r.v[t.dataset.k]=n; update(); }
-  else if(t.matches(".name-input")){ const id=t.id.split("-")[1]; returns.find(x=>x.id==id).label=t.value; update(); }
+  else if(t.matches(".name-input") && t.id.startsWith("name-")){ const id=t.id.split("-")[1]; returns.find(x=>x.id==id).label=t.value; update(); }
 
 });
 document.addEventListener("focusin", e=>{ if(e.target.matches(".stepper input")) e.target.select(); });
@@ -432,26 +433,100 @@ document.addEventListener("focusin", e=>{ if(e.target.matches(".stepper input"))
 const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",year:"numeric"});
 document.getElementById("qdate").textContent = "Quote date: " + today;
 
-function quoteText(){
-  let out = `ANAV Global LLC\nTax Preparation Fee Estimate - Tax Season 2027\nDate: ${today}\nClient: ${document.getElementById("clientName").value.trim()||"-"}\n\n`, grand=0;
-  returns.forEach(r=>{ const q=quote(r), t=TYPES[r.type]; grand+=q.total;
-    out += `${r.label?r.label+" - ":""}Form ${t.form}${q.tier?" ("+q.tier+")":""}\n`;
-    q.lines.forEach(l=> out += `  ${l[0]}: ${usd(l[1])}\n`);
-    out += `  Subtotal: ${usd(q.total)}\n\n`; });
-  return out + `Total estimated fee: ${usd(grand)}\n\nThis estimate is based on the information provided. The final fee will be confirmed after document review.\nwww.anavglobal.com`;
+/* ---------- PDF quote ---------- */
+let currentQuoteId = null;
+const getQuoteId = () => currentQuoteId || (currentQuoteId = newQuoteId());
+let logoCache = null;
+function loadLogo(){
+  if(logoCache) return Promise.resolve(logoCache);
+  return new Promise(res=>{ const img=new Image(); img.onload=()=>{ try{ const c=document.createElement("canvas"); c.width=img.naturalWidth; c.height=img.naturalHeight;
+      c.getContext("2d").drawImage(img,0,0); logoCache={url:c.toDataURL("image/png"), w:img.naturalWidth, h:img.naturalHeight}; res(logoCache);}catch(_){ res(null);} };
+    img.onerror=()=>res(null); img.src="icons/logo.png"; });
 }
-document.getElementById("copyBtn").addEventListener("click", ()=>{
-  const txt=quoteText(), toast=document.getElementById("toast");
-  const fallback=()=>{ const ta=document.createElement("textarea"); ta.value=txt; ta.rows=10; ta.readOnly=true; toast.replaceChildren("Select and copy the text below:", ta); ta.focus(); ta.select(); };
-  try{ navigator.clipboard.writeText(txt).then(()=>{toast.textContent="Quote copied. Paste it into your email.";}).catch(fallback); }catch(_){ fallback(); }
-});
+function splitLine(label){ const m = label.match(/^(.*) × (\d+)$/); return m ? [m[1], Number(m[2])] : [label, 1]; }
+
+async function downloadPdf(){
+  const toast=document.getElementById("toast"), btn=document.getElementById("pdfBtn");
+  if(!window.jspdf){ toast.className="toast bad"; toast.textContent="The PDF tool could not load. Check your connection and try again."; return; }
+  btn.disabled=true; btn.textContent="Preparing PDF…";
+  try{
+    const { jsPDF } = window.jspdf;
+    const doc = new jsPDF({unit:"pt", format:"letter"});
+    const W=612, H=792, M=48, VIOLET=[91,52,209], TEAL=[20,169,156], INK=[27,22,64], MUTED=[97,92,128], SOFT=[236,230,253], LINE=[220,216,236];
+    const client = document.getElementById("clientName").value.trim() || "Not provided";
+    const ref = getQuoteId();
+    // top stripe
+    doc.setFillColor(...VIOLET); doc.rect(0,0,W*0.62,8,"F"); doc.setFillColor(...TEAL); doc.rect(W*0.62,0,W*0.38,8,"F");
+    const logo = await loadLogo();
+    if(logo){ const h=42, w=logo.w/logo.h*h; doc.addImage(logo.url,"PNG",M,30,w,h); }
+    else { doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.setTextColor(...VIOLET); doc.text("ANAV Global LLC",M,58); }
+    doc.setFont("helvetica","bold"); doc.setFontSize(20); doc.setTextColor(...INK); doc.text("FEE ESTIMATE", W-M, 52, {align:"right"});
+    doc.setFont("helvetica","normal"); doc.setFontSize(10); doc.setTextColor(...MUTED); doc.text("Tax Preparation · Tax Season 2027", W-M, 68, {align:"right"});
+    // info block
+    let y=108;
+    doc.setDrawColor(...LINE); doc.setLineWidth(0.8); doc.line(M,y-14,W-M,y-14);
+    const info=(label,val,x)=>{ doc.setFont("helvetica","bold"); doc.setFontSize(8.5); doc.setTextColor(...MUTED); doc.text(label.toUpperCase(),x,y);
+      doc.setFont("helvetica","normal"); doc.setFontSize(11); doc.setTextColor(...INK); doc.text(doc.splitTextToSize(val,200)[0],x,y+15); };
+    info("Prepared for",client,M); info("Quote date",today,M+250); info("Reference",ref,M+390);
+    y+=50;
+    // table header
+    const cRet=M+8, cDesc=M+150, cQty=W-M-120, cAmt=W-M-8;
+    const header=()=>{ doc.setFillColor(...SOFT); doc.rect(M,y,W-2*M,24,"F"); doc.setFont("helvetica","bold"); doc.setFontSize(9); doc.setTextColor(...VIOLET);
+      doc.text("RETURN",cRet,y+16); doc.text("DESCRIPTION",cDesc,y+16); doc.text("QTY",cQty,y+16,{align:"right"}); doc.text("AMOUNT",cAmt,y+16,{align:"right"}); y+=24; };
+    const footer=()=>{ doc.setFont("helvetica","normal"); doc.setFontSize(8.5); doc.setTextColor(...MUTED);
+      doc.text("ANAV Global LLC  ·  www.anavglobal.com", W/2, H-28, {align:"center"}); };
+    const room=n=>{ if(y+n>H-150){ footer(); doc.addPage(); doc.setFillColor(...VIOLET); doc.rect(0,0,W*0.62,8,"F"); doc.setFillColor(...TEAL); doc.rect(W*0.62,0,W*0.38,8,"F"); y=48; header(); } };
+    header();
+    let grand=0;
+    returns.forEach(r=>{
+      const q=quote(r), t=TYPES[r.type]; grand+=q.total;
+      const retName = `Form ${t.form}` + (r.label.trim()?`\n${r.label.trim()}`:"");
+      const retLines = doc.splitTextToSize(retName.split("\n").map(s=>s.slice(0,40)).join("\n"), cDesc-cRet-10);
+      q.lines.forEach((l,i)=>{
+        const [desc,qty]=splitLine(l[0]); const dl=doc.splitTextToSize(desc,cQty-cDesc-40);
+        const rowH=Math.max(i===0?retLines.length:1, dl.length)*13+10; room(rowH);
+        doc.setFont("helvetica", i===0?"bold":"normal"); doc.setFontSize(10); doc.setTextColor(...INK);
+        if(i===0) doc.text(retLines,cRet,y+15);
+        doc.setFont("helvetica","normal"); doc.text(dl,cDesc,y+15); doc.text(String(qty),cQty,y+15,{align:"right"}); doc.text(usd(l[1]),cAmt,y+15,{align:"right"});
+        y+=rowH;
+      });
+      room(22);
+      doc.setFont("helvetica","bold"); doc.setFontSize(10); doc.setTextColor(...INK);
+      doc.text("Subtotal",cQty,y+14,{align:"right"}); doc.text(usd(q.total),cAmt,y+14,{align:"right"}); y+=22;
+      doc.setDrawColor(...LINE); doc.line(M,y,W-M,y); y+=4;
+    });
+    // total
+    room(60); y+=10;
+    doc.setFillColor(...VIOLET); doc.roundedRect(W-M-240,y,240,44,6,6,"F");
+    doc.setFont("helvetica","normal"); doc.setFontSize(9.5); doc.setTextColor(255,255,255); doc.text("TOTAL ESTIMATED FEE",W-M-226,y+27);
+    doc.setFont("helvetica","bold"); doc.setFontSize(18); doc.text(usd(grand),W-M-14,y+29,{align:"right"});
+    y+=70;
+    // notes
+    const notes=["This estimate is based on the information provided and is not a final invoice.",
+      "The final fee will be confirmed after ANAV Global LLC reviews your tax documents.",
+      "Each package includes the federal return and the inclusions listed above. Additional schedules, K-1s or state returns are charged as shown."];
+    doc.setFont("helvetica","bold"); doc.setFontSize(9.5); doc.setTextColor(...INK); doc.text("Notes",M,y); y+=14;
+    doc.setFont("helvetica","normal"); doc.setFontSize(9); doc.setTextColor(...MUTED);
+    notes.forEach(n=>{ const ls=doc.splitTextToSize("•  "+n,W-2*M); if(y+ls.length*12>H-50){ footer(); doc.addPage(); y=48; } doc.text(ls,M,y); y+=ls.length*12+3; });
+    footer();
+    const pages=doc.getNumberOfPages();
+    for(let p=1;p<=pages;p++){ doc.setPage(p); doc.setFontSize(8.5); doc.setTextColor(...MUTED); doc.text(`Page ${p} of ${pages}`, W-M, H-28, {align:"right"}); }
+    const safe = client==="Not provided" ? "Client" : client.replace(/[^A-Za-z0-9]+/g,"-").replace(/^-|-$/g,"").slice(0,40);
+    const file = `ANAV-Fee-Estimate-${safe}-${ref}.pdf`;
+    const iosStandalone = navigator.standalone === true;
+    if(iosStandalone){ window.open(doc.output("bloburl"), "_blank"); } else { doc.save(file); }
+    toast.className="toast"; toast.textContent = "PDF downloaded.";
+  }catch(err){ console.error(err); toast.className="toast bad"; toast.textContent="The PDF could not be created. Please try again."; }
+  finally{ btn.disabled=false; btn.textContent="Download PDF"; }
+}
+document.getElementById("pdfBtn").addEventListener("click", downloadPdf);
 
 document.getElementById("viewQuote").addEventListener("click", e=>{ e.preventDefault(); document.getElementById("quote").scrollIntoView({behavior:"smooth"}); });
 renderPackages(); renderReturns();
 
 /* ---------- Save quote to Google Sheet ---------- */
 // Paste your Google Apps Script web app URL here (see README, "Connect Google Sheet").
-const SHEET_ENDPOINT = "https://script.google.com/macros/s/AKfycby21R7c6G2sZ1G17De5-FEQB840lzZ5Jrct0Q_Zlg4fQKzsBCRM8b9byR9c5RJjhGeh/exec";
+const SHEET_ENDPOINT = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
 const QUEUE_KEY = "anav-pending-quotes";
 const readQueue = () => { try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]"); }catch(_){ return []; } };
 const writeQueue = q => { try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(_){ } };
@@ -459,7 +534,8 @@ const newQuoteId = () => "Q" + new Date().toISOString().slice(2,10).replace(/-/g
 
 async function sendQuote(payload){
   const r = await fetch(SHEET_ENDPOINT, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
-  const j = await r.json();
+  const raw = await r.text();
+  let j; try{ j = JSON.parse(raw); }catch(_){ throw new Error("Server did not return JSON (HTTP " + r.status + "): " + raw.replace(/<[^>]+>/g," ").replace(/\s+/g," ").trim().slice(0,160)); }
   if(!j.ok) throw new Error(j.error || "Save failed");
   return j;
 }
@@ -481,7 +557,7 @@ document.getElementById("saveBtn").addEventListener("click", async ()=>{
   if(!SHEET_ENDPOINT.startsWith("https://")){ toast.className="toast bad"; toast.textContent="Saving is not connected yet. Please contact ANAV Global."; return; }
   const sig = JSON.stringify([name, returns.map(r=>[r.type,r.label,r.v])]);
   if(sig === lastSavedSig){ toast.textContent = "This quote is already saved."; return; }
-  const payload = { quoteId:newQuoteId(), client:name, website:document.getElementById("website").value,
+  const payload = { quoteId:getQuoteId(), client:name, website:document.getElementById("website").value,
     returns: returns.map(r=>({type:r.type, label:r.label.trim(), v:r.v})), shownTotal: returns.reduce((a,r)=>a+quote(r).total,0) };
   btn.disabled = true; btn.textContent = "Saving…";
   try{
@@ -492,12 +568,12 @@ document.getElementById("saveBtn").addEventListener("click", async ()=>{
     if(!navigator.onLine || err instanceof TypeError){
       const q = readQueue(); q.push(payload); writeQueue(q); lastSavedSig = sig;
       toast.textContent = "No connection. The quote is stored on this device and will be sent automatically when you are back online.";
-    } else { toast.className="toast bad"; toast.textContent = "The quote could not be saved. Please try again."; }
+    } else { toast.className="toast bad"; toast.textContent = "The quote could not be saved. Please try again."; console.error("Save failed:", err); const d=document.createElement("small"); d.style.cssText="display:block;margin-top:4px;font-weight:500;color:var(--muted);word-break:break-word"; d.textContent="Details: "+err.message; toast.appendChild(d); }
   }finally{ btn.disabled = false; btn.textContent = "Save my quote"; }
 });
-document.getElementById("clientName").addEventListener("input", e=>{ e.target.parentElement.classList.remove("err"); lastSavedSig=""; });
-document.addEventListener("input", e=>{ if(e.target.matches(".stepper input,.name-input")) lastSavedSig=""; });
-document.addEventListener("click", e=>{ if(e.target.closest("[data-step],[data-add],[data-remove]")) lastSavedSig=""; });
+document.getElementById("clientName").addEventListener("input", e=>{ e.target.parentElement.classList.remove("err"); lastSavedSig=""; currentQuoteId=null; });
+document.addEventListener("input", e=>{ if(e.target.matches(".stepper input,.name-input")){ lastSavedSig=""; currentQuoteId=null; } });
+document.addEventListener("click", e=>{ if(e.target.closest("[data-step],[data-add],[data-remove]")){ lastSavedSig=""; currentQuoteId=null; } });
 window.addEventListener("online", flushQueue); window.addEventListener("load", flushQueue);
 
 /* ---------- Installable app ---------- */

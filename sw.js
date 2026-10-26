@@ -1,9 +1,9 @@
 // ANAV Fee Estimator service worker: offline support.
 // Bump VERSION whenever you change rates or any file, so installed apps pick up the update.
-const VERSION = "anav-fees-2027-v2";
+const VERSION = "anav-fees-2027-v6";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icons/logo.png",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png",
-  "icons/apple-touch-icon.png", "icons/favicon-32.png"];
+  "icons/apple-touch-icon.png", "icons/favicon-32.png", "lib/jspdf.umd.min.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));

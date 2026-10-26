@@ -12,6 +12,7 @@
  * Total is written only on the first row of each quote, so SUM(I:I) = total quoted.
  */
 
+const SHEET_ID = "1folMFXpErjp9vswRVX3Ha91NjLn-mUwfw4l1duz03no"; // ANAV Tax 2027 quotes sheet
 const SHEET_NAME = ""; // leave empty to use the first tab, or put the tab name, e.g. "Sheet1"
 
 const RATES = Object.freeze({
@@ -73,7 +74,7 @@ function doPost(e) {
     const lock = LockService.getScriptLock();
     lock.waitLock(20000);
     try {
-      const ss = SpreadsheetApp.getActiveSpreadsheet();
+      const ss = SpreadsheetApp.openById(SHEET_ID);
       const sh = SHEET_NAME ? ss.getSheetByName(SHEET_NAME) : ss.getSheets()[0];
       ensureHeader_(sh);
 
