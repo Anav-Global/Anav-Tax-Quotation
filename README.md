@@ -32,11 +32,33 @@ Optional: add a custom domain such as `fees.anavglobal.com` in the same Pages se
 | Mac (Chrome / Edge) | Same as Windows. |
 | Mac (Safari 17+) | **File → Add to Dock**. |
 
-## Changing rates
+## Connect Google Sheet (saves every quote)
 
-All rates are in `index.html`, in the `DEFAULT_RATES` block near the top of the script. Edit the numbers, then open `sw.js` and change `VERSION` (for example `anav-fees-2027-v2`) so installed copies pick up the new rates. Commit and push; GitHub Pages republishes automatically.
+When a client taps **Save my quote**, the quote is written to your Google Sheet, one row per line item:
 
-The internal rate card at `.../#rates` changes rates only in the browser where you edit them. It is for testing; clients always see `DEFAULT_RATES`.
+`Sr no | Client name | Return | Product | No of Product | Charges | Date | Quote ID | Total`
+
+Total appears only on the first row of each quote, so `=SUM(I:I)` gives the total quoted. The empty G and H headers are filled with Date and Quote ID automatically.
+
+1. Open the quotes sheet. Go to **Extensions → Apps Script**.
+2. Delete any code there and paste the full contents of `google-apps-script/Code.gs`. Click **Save**.
+3. Optional test: select `testSave` in the toolbar and click **Run**. Approve the permission prompt (Advanced → Go to project). A sample quote appears in the sheet; delete those rows.
+4. Click **Deploy → New deployment**. Select type **Web app**. Set *Execute as* = **Me**, *Who has access* = **Anyone**. Click **Deploy** and copy the **Web app URL** (ends in `/exec`).
+5. In `index.html`, find `const SHEET_ENDPOINT = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";` and paste the URL between the quotes.
+6. In `sw.js`, change `VERSION` (for example `anav-fees-2027-v3`). Commit and push to GitHub.
+
+If you later edit `Code.gs`, use **Deploy → Manage deployments → Edit → Version: New version**. This keeps the same URL. A *New deployment* creates a new URL and you would have to update `index.html` again.
+
+If a client is offline, the quote is stored on their device and sent automatically when they are back online. Retries never create duplicate rows (the Quote ID is checked).
+
+## Rates are locked
+
+Rates are fixed in two places and cannot be changed from the browser:
+
+- `index.html` → `DEFAULT_RATES` (what the client sees)
+- `google-apps-script/Code.gs` → `RATES` (what is written to the sheet)
+
+The sheet re-calculates every quote with its own rates, so even an edited copy of the page cannot write a different price. To change rates in future, change **both** files, bump `VERSION` in `sw.js`, and deploy a new version of the Apps Script.
 
 ## Files
 
@@ -44,4 +66,5 @@ The internal rate card at `.../#rates` changes rates only in the browser where y
 - `manifest.webmanifest` - app name, icons and colors for installation
 - `sw.js` - service worker for offline use and updates
 - `icons/` - logo and app icons
+- `google-apps-script/Code.gs` - paste into the sheet's Apps Script to receive and save quotes
 - `.nojekyll` - tells GitHub Pages to serve files as-is

@@ -165,6 +165,13 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
 .toast{font-size:13px;color:var(--teal);font-weight:600;min-height:1.2em}
 .toast textarea{width:100%;margin-top:6px;font-family:var(--f-num);font-size:12px;border-radius:8px;border:1px solid var(--line);background:var(--surface);color:var(--fg);padding:8px}
 .fine{margin:0;font-size:12px;color:var(--muted)}
+.client-grid{padding-bottom:14px}
+.field label{display:block;font-weight:600;margin-top:10px}
+.req{color:var(--pink)}
+.field.err input{border-color:var(--pink);box-shadow:0 0 0 3px var(--violet-soft)}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;opacity:0}
+.btn:disabled{opacity:.6;cursor:wait}
+.toast.bad{color:var(--pink)}
 
 .rates{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px 18px}
 .rates h3{margin:0;font-size:15px}
@@ -212,6 +219,14 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
 
 <div class="wrap main">
   <div class="stack">
+    <section class="card client-card" style="--c:var(--violet);--s:var(--violet-soft)" aria-label="Your details">
+      <div class="card-head"><div class="card-title"><span class="badge">Step 1</span><h2>Your details</h2></div></div>
+      <div class="card-body client-grid">
+        <div class="field"><label for="clientName">Full name or business name <span class="req">*</span></label>
+          <input class="name-input" id="clientName" autocomplete="name" maxlength="120" placeholder="e.g. John Smith"></div>
+        <input type="text" id="website" name="website" tabindex="-1" autocomplete="off" class="hp" aria-hidden="true">
+      </div>
+    </section>
     <p class="section-label" style="margin:4px 0 -4px">Your returns</p>
     <div class="stack" id="returns"></div>
   </div>
@@ -226,12 +241,12 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
       <div class="mix"><div class="bar" id="bar"></div><div class="legend" id="legend"></div></div>
       <div class="lines" id="lines"></div>
       <div class="quote-foot">
-        <button class="btn" id="copyBtn" type="button">Copy quote</button>
+        <button class="btn" id="saveBtn" type="button">Save my quote</button>
+        <button class="btn ghost" id="copyBtn" type="button">Copy quote</button>
         <div class="toast" id="toast" aria-live="polite"></div>
         <p class="fine">This estimate is based on your answers. The final fee is confirmed after we review your documents. One federal return and the listed inclusions are covered by each package.</p>
       </div>
     </div>
-    <div class="rates" id="ratesPanel" hidden></div>
   </aside>
 </div>
 
@@ -255,7 +270,8 @@ const RATE_META = {
 };
 const STORE_KEY = "anav-fee-rates-2027-v3";
 let RATES = JSON.parse(JSON.stringify(DEFAULT_RATES));
-try{ const s = localStorage.getItem(STORE_KEY); if(s){ const p = JSON.parse(s); for(const k in RATES) Object.assign(RATES[k], p[k]||{}); } }catch(e){}
+try{ localStorage.removeItem("anav-fee-rates-2027-v2"); localStorage.removeItem(STORE_KEY); }catch(e){}
+for(const k in RATES) Object.freeze(RATES[k]); Object.freeze(RATES);
 
 const COL = {i1040:["var(--violet)","var(--violet-soft)"], f1065:["var(--blue)","var(--blue-soft)"], f1120s:["var(--teal)","var(--teal-soft)"], f1120:["var(--amber)","var(--amber-soft)"]};
 const TYPES = {
@@ -409,10 +425,7 @@ document.addEventListener("input", e=>{
   if(t.matches(".stepper input")){ const r=returns.find(x=>x.id==t.dataset.r);
     let n=parseInt(t.value,10); if(isNaN(n)||n<0) n=0; if(n>99) n=99; r.v[t.dataset.k]=n; update(); }
   else if(t.matches(".name-input")){ const id=t.id.split("-")[1]; returns.find(x=>x.id==id).label=t.value; update(); }
-  else if(t.matches("[data-rate]")){ const [g,k]=t.dataset.rate.split(".");
-    if(t.type==="checkbox") RATES[g][k]=t.checked?1:0; else { const n=parseFloat(t.value); RATES[g][k]=isNaN(n)||n<0?0:n; }
-    try{localStorage.setItem(STORE_KEY,JSON.stringify(RATES));}catch(_){ }
-    renderPackages(); update(); }
+
 });
 document.addEventListener("focusin", e=>{ if(e.target.matches(".stepper input")) e.target.select(); });
 
@@ -420,7 +433,7 @@ const today = new Date().toLocaleDateString("en-US",{month:"long",day:"numeric",
 document.getElementById("qdate").textContent = "Quote date: " + today;
 
 function quoteText(){
-  let out = `ANAV Global LLC\nTax Preparation Fee Estimate - Tax Season 2027\nDate: ${today}\n\n`, grand=0;
+  let out = `ANAV Global LLC\nTax Preparation Fee Estimate - Tax Season 2027\nDate: ${today}\nClient: ${document.getElementById("clientName").value.trim()||"-"}\n\n`, grand=0;
   returns.forEach(r=>{ const q=quote(r), t=TYPES[r.type]; grand+=q.total;
     out += `${r.label?r.label+" - ":""}Form ${t.form}${q.tier?" ("+q.tier+")":""}\n`;
     q.lines.forEach(l=> out += `  ${l[0]}: ${usd(l[1])}\n`);
@@ -433,26 +446,59 @@ document.getElementById("copyBtn").addEventListener("click", ()=>{
   try{ navigator.clipboard.writeText(txt).then(()=>{toast.textContent="Quote copied. Paste it into your email.";}).catch(fallback); }catch(_){ fallback(); }
 });
 
-function renderRates(){
-  const p=document.getElementById("ratesPanel");
-  if(location.hash!=="#rates"){ p.hidden=true; return; }
-  p.hidden=false;
-  let h=`<h3>Rate card (internal)</h3><div class="note">Changes here save only in this browser. Clients always see the published 2027 rates.</div>`;
-  for(const g in RATE_META){
-    h+=`<div class="rate-grp"><h4>${RATE_META[g].title}</h4>`;
-    RATE_META[g].rows.forEach(([k,label,kind])=>{ const id=`r-${g}-${k}`;
-      h+= kind==="bool"
-        ? `<div class="rate-row"><label for="${id}">${label}</label><input id="${id}" type="checkbox" data-rate="${g}.${k}" ${RATES[g][k]?"checked":""}></div>`
-        : `<div class="rate-row"><label for="${id}">${label}</label><input id="${id}" type="number" min="0" step="1" data-rate="${g}.${k}" value="${RATES[g][k]}"></div>`; });
-    h+=`</div>`;
-  }
-  h+=`<button class="btn ghost" type="button" id="resetRates" style="margin-top:12px">Reset to published rates</button>`;
-  p.innerHTML=h;
-  document.getElementById("resetRates").onclick=()=>{ RATES=JSON.parse(JSON.stringify(DEFAULT_RATES)); try{localStorage.removeItem(STORE_KEY);}catch(_){ } renderRates(); renderPackages(); update(); };
-}
-window.addEventListener("hashchange", renderRates);
 document.getElementById("viewQuote").addEventListener("click", e=>{ e.preventDefault(); document.getElementById("quote").scrollIntoView({behavior:"smooth"}); });
-renderPackages(); renderReturns(); renderRates();
+renderPackages(); renderReturns();
+
+/* ---------- Save quote to Google Sheet ---------- */
+// Paste your Google Apps Script web app URL here (see README, "Connect Google Sheet").
+const SHEET_ENDPOINT = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";
+const QUEUE_KEY = "anav-pending-quotes";
+const readQueue = () => { try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]"); }catch(_){ return []; } };
+const writeQueue = q => { try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(_){ } };
+const newQuoteId = () => "Q" + new Date().toISOString().slice(2,10).replace(/-/g,"") + "-" + Math.random().toString(36).slice(2,7).toUpperCase();
+
+async function sendQuote(payload){
+  const r = await fetch(SHEET_ENDPOINT, {method:"POST", headers:{"Content-Type":"text/plain;charset=utf-8"}, body:JSON.stringify(payload)});
+  const j = await r.json();
+  if(!j.ok) throw new Error(j.error || "Save failed");
+  return j;
+}
+async function flushQueue(){
+  if(!SHEET_ENDPOINT.startsWith("https://")) return;
+  let q = readQueue(); if(!q.length) return;
+  const left = [];
+  for(const p of q){ try{ await sendQuote(p); }catch(_){ left.push(p); } }
+  writeQueue(left);
+}
+let lastSavedSig = "";
+document.getElementById("saveBtn").addEventListener("click", async ()=>{
+  const btn = document.getElementById("saveBtn"), toast = document.getElementById("toast");
+  const nameEl = document.getElementById("clientName"), name = nameEl.value.trim();
+  toast.className = "toast";
+  if(!name){ nameEl.parentElement.classList.add("err"); nameEl.focus(); nameEl.scrollIntoView({behavior:"smooth",block:"center"});
+    toast.className="toast bad"; toast.textContent="Enter your name before saving the quote."; return; }
+  nameEl.parentElement.classList.remove("err");
+  if(!SHEET_ENDPOINT.startsWith("https://")){ toast.className="toast bad"; toast.textContent="Saving is not connected yet. Please contact ANAV Global."; return; }
+  const sig = JSON.stringify([name, returns.map(r=>[r.type,r.label,r.v])]);
+  if(sig === lastSavedSig){ toast.textContent = "This quote is already saved."; return; }
+  const payload = { quoteId:newQuoteId(), client:name, website:document.getElementById("website").value,
+    returns: returns.map(r=>({type:r.type, label:r.label.trim(), v:r.v})), shownTotal: returns.reduce((a,r)=>a+quote(r).total,0) };
+  btn.disabled = true; btn.textContent = "Saving…";
+  try{
+    const j = await sendQuote(payload);
+    lastSavedSig = sig;
+    toast.textContent = `Quote saved. Reference ${j.quoteId}, total ${usd(j.total)}.`;
+  }catch(err){
+    if(!navigator.onLine || err instanceof TypeError){
+      const q = readQueue(); q.push(payload); writeQueue(q); lastSavedSig = sig;
+      toast.textContent = "No connection. The quote is stored on this device and will be sent automatically when you are back online.";
+    } else { toast.className="toast bad"; toast.textContent = "The quote could not be saved. Please try again."; }
+  }finally{ btn.disabled = false; btn.textContent = "Save my quote"; }
+});
+document.getElementById("clientName").addEventListener("input", e=>{ e.target.parentElement.classList.remove("err"); lastSavedSig=""; });
+document.addEventListener("input", e=>{ if(e.target.matches(".stepper input,.name-input")) lastSavedSig=""; });
+document.addEventListener("click", e=>{ if(e.target.closest("[data-step],[data-add],[data-remove]")) lastSavedSig=""; });
+window.addEventListener("online", flushQueue); window.addEventListener("load", flushQueue);
 
 /* ---------- Installable app ---------- */
 if("serviceWorker" in navigator){ window.addEventListener("load", ()=>navigator.serviceWorker.register("sw.js").catch(()=>{})); }

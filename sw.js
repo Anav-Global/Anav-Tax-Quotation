@@ -1,6 +1,6 @@
 // ANAV Fee Estimator service worker: offline support.
 // Bump VERSION whenever you change rates or any file, so installed apps pick up the update.
-const VERSION = "anav-fees-2027-v1";
+const VERSION = "anav-fees-2027-v2";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icons/logo.png",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png",
   "icons/apple-touch-icon.png", "icons/favicon-32.png"];
