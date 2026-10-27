@@ -255,6 +255,7 @@ aside{position:sticky;top:calc(env(safe-area-inset-top,0px) + 14px);min-width:0;
   <a href="#quote" id="viewQuote">View quote</a>
 </div>
 
+<script src="config.js"></script>
 <script src="lib/jspdf.umd.min.js"></script>
 <script>
 const DEFAULT_RATES = {
@@ -525,8 +526,8 @@ document.getElementById("viewQuote").addEventListener("click", e=>{ e.preventDef
 renderPackages(); renderReturns();
 
 /* ---------- Save quote to Google Sheet ---------- */
-// Paste your Google Apps Script web app URL here (see README, "Connect Google Sheet").
-const SHEET_ENDPOINT = "https://script.google.com/macros/s/XXXXXXXX/exec";
+// The Apps Script URL lives in config.js, so updates to this file never need it re-pasted.
+const SHEET_ENDPOINT = String((window.ANAV_CONFIG && window.ANAV_CONFIG.SHEET_ENDPOINT) || "").trim();
 const QUEUE_KEY = "anav-pending-quotes";
 const readQueue = () => { try{ return JSON.parse(localStorage.getItem(QUEUE_KEY)||"[]"); }catch(_){ return []; } };
 const writeQueue = q => { try{ localStorage.setItem(QUEUE_KEY, JSON.stringify(q)); }catch(_){ } };
@@ -541,12 +542,12 @@ async function sendQuote(payload){
 }
 async function flushQueue(){
   if(!SHEET_ENDPOINT.startsWith("https://")) return;
-  let q = readQueue(); if(!q.length) return;
+  let q = readQueue(); if(!q.length || !navigator.onLine) return;
   const left = [];
   for(const p of q){ try{ await sendQuote(p); }catch(_){ left.push(p); } }
   writeQueue(left);
 }
-let lastSavedSig = "";
+let lastSavedSig = "", lastSavedRef = "";
 document.getElementById("saveBtn").addEventListener("click", async ()=>{
   const btn = document.getElementById("saveBtn"), toast = document.getElementById("toast");
   const nameEl = document.getElementById("clientName"), name = nameEl.value.trim();
@@ -556,19 +557,28 @@ document.getElementById("saveBtn").addEventListener("click", async ()=>{
   nameEl.parentElement.classList.remove("err");
   if(!SHEET_ENDPOINT.startsWith("https://")){ toast.className="toast bad"; toast.textContent="Saving is not connected yet. Please contact ANAV Global."; return; }
   const sig = JSON.stringify([name, returns.map(r=>[r.type,r.label,r.v])]);
-  if(sig === lastSavedSig){ toast.textContent = "This quote is already saved."; return; }
+  if(sig === lastSavedSig && lastSavedRef){ toast.textContent = `This quote is already saved. Reference ${lastSavedRef}.`; return; }
   const payload = { quoteId:getQuoteId(), client:name, website:document.getElementById("website").value,
     returns: returns.map(r=>({type:r.type, label:r.label.trim(), v:r.v})), shownTotal: returns.reduce((a,r)=>a+quote(r).total,0) };
   btn.disabled = true; btn.textContent = "Saving…";
   try{
     const j = await sendQuote(payload);
-    lastSavedSig = sig;
-    toast.textContent = `Quote saved. Reference ${j.quoteId}, total ${usd(j.total)}.`;
+    lastSavedSig = sig; lastSavedRef = j.quoteId || payload.quoteId;
+    toast.textContent = j.duplicate
+      ? `This quote was already in the sheet. Reference ${lastSavedRef}.`
+      : `Quote saved. Reference ${lastSavedRef}, total ${usd(j.total)}.`;
   }catch(err){
-    if(!navigator.onLine || err instanceof TypeError){
-      const q = readQueue(); q.push(payload); writeQueue(q); lastSavedSig = sig;
-      toast.textContent = "No connection. The quote is stored on this device and will be sent automatically when you are back online.";
-    } else { toast.className="toast bad"; toast.textContent = "The quote could not be saved. Please try again."; console.error("Save failed:", err); const d=document.createElement("small"); d.style.cssText="display:block;margin-top:4px;font-weight:500;color:var(--muted);word-break:break-word"; d.textContent="Details: "+err.message; toast.appendChild(d); }
+    console.error("Save failed:", err);
+    if(!navigator.onLine){
+      const q = readQueue(); if(!q.some(p=>p.quoteId===payload.quoteId)) q.push(payload); writeQueue(q);
+      toast.textContent = "You are offline. The quote is stored on this device and will be sent when you are back online.";
+    } else {
+      toast.className="toast bad";
+      toast.textContent = "The quote could not be saved. Please try again.";
+      const d=document.createElement("small"); d.style.cssText="display:block;margin-top:4px;font-weight:500;color:var(--muted);word-break:break-word";
+      d.textContent = "Details: " + (err instanceof TypeError ? "The sheet service blocked the request (" + err.message + "). Check the Apps Script deployment access." : err.message);
+      toast.appendChild(d);
+    }
   }finally{ btn.disabled = false; btn.textContent = "Save my quote"; }
 });
 document.getElementById("clientName").addEventListener("input", e=>{ e.target.parentElement.classList.remove("err"); lastSavedSig=""; currentQuoteId=null; });

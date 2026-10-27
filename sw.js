@@ -1,9 +1,9 @@
 // ANAV Fee Estimator service worker: offline support.
 // Bump VERSION whenever you change rates or any file, so installed apps pick up the update.
-const VERSION = "anav-fees-2027-v6";
+const VERSION = "anav-fees-2027-v7";
 const CORE = ["./", "index.html", "manifest.webmanifest", "icons/logo.png",
   "icons/icon-192.png", "icons/icon-512.png", "icons/maskable-512.png",
-  "icons/apple-touch-icon.png", "icons/favicon-32.png", "lib/jspdf.umd.min.js"];
+  "icons/apple-touch-icon.png", "icons/favicon-32.png", "lib/jspdf.umd.min.js", "config.js"];
 
 self.addEventListener("install", e => {
   e.waitUntil(caches.open(VERSION).then(c => c.addAll(CORE)).then(() => self.skipWaiting()));
@@ -20,6 +20,12 @@ self.addEventListener("fetch", e => {
   if (req.mode === "navigate") {
     e.respondWith(fetch(req).then(r => { const copy = r.clone(); caches.open(VERSION).then(c => c.put("index.html", copy)); return r; })
       .catch(() => caches.match("index.html")));
+    return;
+  }
+  // config.js: network first, so a changed Apps Script URL takes effect immediately
+  if (url.origin === location.origin && url.pathname.endsWith("/config.js")) {
+    e.respondWith(fetch(req).then(r => { const copy = r.clone(); caches.open(VERSION).then(c => c.put(req, copy)); return r; })
+      .catch(() => caches.match(req)));
     return;
   }
   // Same-origin files and Google Fonts: cache first, then network

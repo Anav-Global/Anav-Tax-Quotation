@@ -44,7 +44,7 @@ Total appears only on the first row of each quote, so `=SUM(I:I)` gives the tota
 2. Delete any code there and paste the full contents of `google-apps-script/Code.gs`. Click **Save**.
 3. Optional test: select `testSave` in the toolbar and click **Run**. Approve the permission prompt (Advanced → Go to project). A sample quote appears in the sheet; delete those rows.
 4. Click **Deploy → New deployment**. Select type **Web app**. Set *Execute as* = **Me**, *Who has access* = **Anyone**. Click **Deploy** and copy the **Web app URL** (ends in `/exec`).
-5. In `index.html`, find `const SHEET_ENDPOINT = "PASTE_YOUR_APPS_SCRIPT_URL_HERE";` and paste the URL between the quotes.
+5. Open `config.js` and paste the URL between the quotes of `SHEET_ENDPOINT`. You only do this once; later updates to `index.html` do not need it again.
 6. In `sw.js`, change `VERSION` (for example `anav-fees-2027-v3`). Commit and push to GitHub.
 
 If you later edit `Code.gs`, use **Deploy → Manage deployments → Edit → Version: New version**. This keeps the same URL. A *New deployment* creates a new URL and you would have to update `index.html` again.
@@ -63,6 +63,7 @@ The sheet re-calculates every quote with its own rates, so even an edited copy o
 ## Files
 
 - `index.html` - the app (questionnaire, pricing logic, quote)
+- `config.js` - your Apps Script URL (set once)
 - `manifest.webmanifest` - app name, icons and colors for installation
 - `sw.js` - service worker for offline use and updates
 - `icons/` - logo and app icons
